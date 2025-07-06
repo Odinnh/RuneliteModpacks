@@ -1,4 +1,4 @@
-name: Auto-sort *.properties files
+name: Auto-sort *.properties files (with sensitive line removal)
 
 on:
   push:
@@ -12,13 +12,13 @@ jobs:
   auto-sort-properties:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Needed to push changes
+      contents: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Sort all *.properties files alphabetically
+      - name: Clean and sort all *.properties files
         run: |
           set -e
           shopt -s globstar nullglob
@@ -26,9 +26,12 @@ jobs:
           
           for file in **/*.properties; do
             temp=$(mktemp)
-            sort "$file" > "$temp"
+            # Remove lines that match any sensitive keywords or patterns
+            grep -v -Ei '^(.*(api[_-]?key|token|webhook|password|username|auth|secret|endpoint)[^=]*=|https?://|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)' "$file" \
+              | sort > "$temp"
+
             if ! cmp -s "$file" "$temp"; then
-              echo "Sorting $file"
+              echo "Cleaning and sorting $file"
               mv "$temp" "$file"
               git add "$file"
               changed=true
@@ -40,8 +43,8 @@ jobs:
           if $changed; then
             git config user.name "github-actions"
             git config user.email "github-actions@github.com"
-            git commit -m "Auto-sorted *.properties files"
+            git commit -m "Cleaned and auto-sorted *.properties files"
             git push
           else
-            echo "All *.properties files already sorted"
+            echo "No changes needed — all files clean and sorted"
           fi
